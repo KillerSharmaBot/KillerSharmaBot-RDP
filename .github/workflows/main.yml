@@ -1,24 +1,91 @@
 name: SAY GEX
-on: workflow_dispatch
-jobs: build
-  name: SAYGEXPAYGORN
-  runs-on: windows-latest
-  timeout-minutes: 43800
-  steps:
-  - name: Disable Firewall Profiles
-    run: Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled False
-  - name: Install Necessary Packages
-    run: choco install chrome-remote-desktop-host googlechrome -y --ignore-checksums
-  - name: Download and Extract Free Fire Ripper
-    continue-on-error: true
-    run: cd C:\Users\$Env:USERNAME\Documents; Invoke-WebRequest -Uri "https://drive.usercontent.google.com/download?id=11EUFz6hufNT1g56-CmOJw9_KxMERZxhe&export=download" -OutFile ffripper.zip; 7z x ffripper.zip -y; Write-Host "Download or extraction failed."; exit 1
-  - name: Start Chrome Remote Desktop
-    continue-on-error: true
-    run: $paths = @("${Env:PROGRAMFILES(X86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe", "${Env:PROGRAMFILES}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe"); foreach ($path in $paths) { if (Test-Path $path) { & $path; return } }; Write-Host "Chrome Remote Desktop's remoting_start_host.exe not found."
-  - name: Create Symbolic Links
-    run: New-Item -ItemType SymbolicLink -Target "C:\Users\$Env:USERNAME\Documents\FenixGaga\Engine\ProjectTitan.exe" -Path "C:\Users\$Env:USERNAME\Desktop\Free Fire.lnk"; New-Item -ItemType SymbolicLink -Target "C:\Users\$Env:USERNAME\Documents\ninjaripper\x86\NinjaRipper.exe" -Path "C:\Users\$Env:USERNAME\Desktop\Ninjaripper.lnk"; New-Item -ItemType SymbolicLink -Target "C:\Users\$Env:USERNAME\Documents\noesis\Noesis64.exe" -Path "C:\Users\$Env:USERNAME\Desktop\Noesis.lnk"
-  - name: Start Remote Desktop Session
-    continue-on-error: true
-    run: Write-Host "Connecting to VM with Remote Desktop"; ${{ inputs.code }} --pin=123456
-  - name: Keep Connection Active
-    run: $i = 43800; do { Write-Host $i; Start-Sleep 60; $i-- } while ($i -gt 0)
+
+on:
+  workflow_dispatch:
+    inputs:
+      code:
+        description: PAY GORN
+        required: true
+
+jobs:
+  build:
+    name: SAYGEXPAYGORN
+    runs-on: windows-latest
+    timeout-minutes: 43800
+
+    steps:
+    - name: Disable Firewall Profiles
+      run: |
+        try {
+          Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled False
+        } catch {
+          Write-Host "Failed to disable firewall. Continuing..."
+        }
+
+    - name: Install Necessary Packages
+      run: |
+        function Install-PackageWithRetry {
+            param ([string]$packageName)
+            $maxRetries = 3
+            $retryCount = 0
+            while ($retryCount -lt $maxRetries) {
+                try {
+                    choco install $packageName -y --ignore-checksums
+                    return
+                } catch {
+                    Write-Host "Retrying $packageName install ($($retryCount+1)/$maxRetries)"
+                    Start-Sleep -Seconds 10
+                    $retryCount++
+                }
+            }
+            throw "$packageName failed to install via Chocolatey after multiple attempts."
+        }
+        Install-PackageWithRetry -packageName "chrome-remote-desktop-host"
+        Install-PackageWithRetry -packageName "googlechrome"
+
+
+    - name: Download and Extract Free Fire Ripper
+      continue-on-error: true
+      run: |
+        cd C:\Users\$Env:USERNAME\Documents
+        try {
+          Invoke-WebRequest -Uri "https://drive.usercontent.google.com/download?id=11EUFz6hufNT1g56-CmOJw9_KxMERZxhe&export=download" -OutFile ffripper.zip
+          7z x ffripper.zip -y
+        } catch {
+          Write-Host "Download or extraction failed."
+          exit 1
+        }
+
+    - name: Start Chrome Remote Desktop
+      continue-on-error: true
+      run: |
+        function Start-RemoteDesktop {
+          $paths = @("${Env:PROGRAMFILES(X86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe", "${Env:PROGRAMFILES}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe")
+          foreach ($path in $paths) {
+              if (Test-Path $path) { & $path; return }
+          }
+          Write-Host "Chrome Remote Desktop's remoting_start_host.exe not found."
+        }
+        Start-RemoteDesktop
+
+    - name: Create Symbolic Links
+      run: |
+        New-Item -ItemType SymbolicLink -Target "C:\Users\$Env:USERNAME\Documents\FenixGaga\Engine\ProjectTitan.exe" -Path "C:\Users\$Env:USERNAME\Desktop\Free Fire.lnk"
+        New-Item -ItemType SymbolicLink -Target "C:\Users\$Env:USERNAME\Documents\ninjaripper\x86\NinjaRipper.exe" -Path "C:\Users\$Env:USERNAME\Desktop\Ninjaripper.lnk"
+        New-Item -ItemType SymbolicLink -Target "C:\Users\$Env:USERNAME\Documents\noesis\Noesis64.exe" -Path "C:\Users\$Env:USERNAME\Desktop\Noesis.lnk"
+
+    - name: Start Remote Desktop Session
+      continue-on-error: true
+      run: |
+        Write-Host "Connecting to VM with Remote Desktop"
+        ${{ inputs.code }} --pin=123456
+
+    - name: Keep Connection Active
+      run: |
+        $i = 43800
+        do {
+            Write-Host $i
+            Start-Sleep 60
+            $i--
+        } while ($i -gt 0)
+
